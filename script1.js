@@ -392,8 +392,83 @@ try {
 }
 
     // SECTION 10: PROSPECT DIALING
-    const targetStatus = prompt('Enter the Status to dial: ').trim();
+    // SECTION 10: INTERACTIVE STATUS SELECTOR
+console.log('\n=== STATUS SELECTOR ===');
 
+const availableStatuses = [
+  '[Active Prospect]-1st Day of Attempted Contact',
+  '[Active Prospect]-2nd Day of Attempted Contact', 
+  '[Active Prospect]-3rd Day of Attempted Contact',
+  '[Active Prospect]-4th Day of Attempted Contact',
+  '[Active Prospect]-OPENERS',
+  '[Active Prospect]-Reschedule Appointment',
+  '[Active Prospect]-Working'
+];
+
+const selectedStatuses = new Map(); // Track selected statuses and counts
+
+function displayStatusMenu() {
+  console.log('\n=== SELECT STATUSES TO DIAL ===');
+  console.log('Enter the number to toggle a status (adds *1, *2, etc.)');
+  console.log('Enter 0 when done selecting\n');
+  
+  availableStatuses.forEach((status, index) => {
+    const count = selectedStatuses.get(status) || 0;
+    const countDisplay = count > 0 ? ` *${count}` : '';
+    console.log(`${index + 1}. ${status}${countDisplay}`);
+  });
+  
+  if (selectedStatuses.size > 0) {
+    console.log('\n--- SELECTED STATUSES ---');
+    selectedStatuses.forEach((count, status) => {
+      console.log(`${status} *${count}`);
+    });
+  }
+  
+  console.log('\n0. Start dialing selected statuses');
+  console.log('99. Clear all selections');
+}
+
+// Status selection loop
+let selecting = true;
+while (selecting) {
+  displayStatusMenu();
+  
+  const choice = prompt('\nEnter your choice: ').trim();
+  const choiceNum = parseInt(choice);
+  
+  if (choice === '0') {
+    if (selectedStatuses.size > 0) {
+      selecting = false;
+      console.log('\nStarting to dial selected statuses...');
+    } else {
+      console.log('\nNo statuses selected! Please select at least one.');
+    }
+  } else if (choice === '99') {
+    selectedStatuses.clear();
+    console.log('\nAll selections cleared.');
+  } else if (choiceNum >= 1 && choiceNum <= availableStatuses.length) {
+    const selectedStatus = availableStatuses[choiceNum - 1];
+    const currentCount = selectedStatuses.get(selectedStatus) || 0;
+    selectedStatuses.set(selectedStatus, currentCount + 1);
+    console.log(`\nAdded: ${selectedStatus} *${currentCount + 1}`);
+  } else {
+    console.log('\nInvalid choice. Please try again.');
+  }
+}
+
+// Convert selected statuses to array for dialing
+const statusesToDial = [];
+selectedStatuses.forEach((count, status) => {
+  for (let i = 0; i < count; i++) {
+    statusesToDial.push(status);
+  }
+});
+
+console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatuses.size} different statuses.`);
+
+
+    // Get frame and rows for dialing
     console.log('Looking for prospects...');
     let frameHandle, frame;
     
@@ -404,18 +479,18 @@ try {
       await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
       const rows = await frame.$$('tr.k-master-row');
       
-      console.log(`Found ${rows.length} rows. Searching for: "${targetStatus}"`);
-      
+      console.log(`Found ${rows.length} rows. Searching for selected statuses...`);
+      let currentStatusIndex = 0;
       let found = false;
       
-      for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+      for (let rowIdx = 0; rowIdx < rows.length && currentStatusIndex < statusesToDial.length; rowIdx++) {
         const row = rows[rowIdx];
         const cells = await row.$$('td');
         
         if (cells.length > 9) {
           const status = (await cells[9].innerText()).trim();
           
-          if (status === targetStatus) {
+          if (status === statusesToDial[currentStatusIndex]) {
             // Highlight row
             await frame.evaluate(idx => {
               const row = document.querySelectorAll('tr.k-master-row')[idx];
@@ -457,13 +532,20 @@ try {
             }
 
             found = true;
-            break;
+            currentStatusIndex++; // Move to next status in queue
+            
+            if (currentStatusIndex >= statusesToDial.length) {
+              console.log('\nAll selected statuses have been dialed!');
+              break;
+            }
           }
         }
       }
 
       if (!found) {
-        console.log(`No prospect found with status: "${targetStatus}"`);
+        console.log(`No prospects found with selected statuses.`);
+      } else if (currentStatusIndex < statusesToDial.length) {
+        console.log(`\nDialed ${currentStatusIndex} out of ${statusesToDial.length} selected prospects.`);
       }
 
     } catch (error) {
@@ -481,5 +563,4 @@ try {
     }
   }
 })();
-// END OF SCRIPT
-
+          
