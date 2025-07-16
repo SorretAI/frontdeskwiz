@@ -1,0 +1,27 @@
+# Browser data and sessions
+playwright-profile/
+debug-page.png
+
+# Environment variables (contains credentials)
+.env
+
+# Node modules if you have them
+node_modules/
+
+# Logs
+*.log
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo

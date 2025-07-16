@@ -268,16 +268,79 @@ if (needsIRSLogin || needsRCLogin) {
   console.log('Sessions will be saved automatically for next time!');
 }
     // SECTION 9: NAVIGATION
-    console.log('\n=== NAVIGATION ===');
-    await page.bringToFront();
-    
-    console.log('Please navigate manually to FD 2 PROSPECTS:');
-    console.log('1. Click on Cases in left menu');
-    console.log('2. Click on FD 2 PROSPECTS');
-    console.log('3. Sort by Status column');
-    
-    prompt('Press Enter when you are on FD 2 PROSPECTS page...');
+    console.log('\n=== AUTOMATED NAVIGATION ===');
+await page.bringToFront();
+await page.waitForTimeout(2000);
 
+try {
+  // Click on Cases in the left sidebar
+  console.log('Clicking on Cases...');
+  const casesSelectors = [
+    'text=Cases',
+    '[title="Cases"]',
+    'a:has-text("Cases")',
+    'span:has-text("Cases")',
+    '#Cases',
+    '.cases'
+  ];
+  
+  let casesClicked = false;
+  for (const selector of casesSelectors) {
+    try {
+      const casesElement = await page.$(selector);
+      if (casesElement) {
+        await casesElement.click();
+        console.log(`Cases clicked with selector: ${selector}`);
+        casesClicked = true;
+        await page.waitForTimeout(1500);
+        break;
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  
+  if (!casesClicked) {
+    console.log('Could not click Cases automatically');
+    prompt('Please click Cases manually and press Enter...');
+  }
+  
+  // Now click on FD 2 PROSPECTS (it should be visible after clicking Cases)
+  console.log('Looking for FD 2 PROSPECTS...');
+  const fd2Selectors = [
+    'text=FD 2 PROSPECTS',
+    'a:has-text("FD 2 PROSPECTS")',
+    '[title="FD 2 PROSPECTS"]',
+    'span:has-text("FD 2 PROSPECTS")'
+  ];
+  
+  let fd2Clicked = false;
+  for (const selector of fd2Selectors) {
+    try {
+      const fd2Element = await page.$(selector);
+      if (fd2Element) {
+        await fd2Element.click();
+        console.log(`FD 2 PROSPECTS clicked with selector: ${selector}`);
+        fd2Clicked = true;
+        await page.waitForTimeout(3000);
+        break;
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  
+  if (!fd2Clicked) {
+    console.log('Could not click FD 2 PROSPECTS automatically');
+    prompt('Please click FD 2 PROSPECTS manually and press Enter...');
+  }
+  
+  console.log('Navigation completed! Looking for prospects table...');
+  
+} catch (error) {
+  console.log('Navigation error:', error.message);
+  prompt('Please navigate manually to FD 2 PROSPECTS and press Enter...');
+}
     // SECTION 10: PROSPECT DIALING
     const targetStatus = prompt('Enter the Status to dial: ').trim();
 
