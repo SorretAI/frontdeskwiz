@@ -561,8 +561,105 @@ console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatu
               console.log('📋 Phone number is in clipboard - paste manually with Ctrl+V');
             }
             
-            // Pause for manual calling
-            prompt('Press Enter after making the call...');
+          console.log('📞 Press ENTER to call, or wait 3 seconds for auto-call...');
+            
+            // 3 second countdown to press Enter or auto-call
+            let callInitiated = false;
+            for (let i = 3; i > 0; i--) {
+              process.stdout.write(`\rAuto-call in ${i}s... (Press ENTER to call now) `);
+              
+              // Check if Enter was pressed
+               await new Promise(resolve => {
+                const timeout = setTimeout(resolve, 1000);
+                process.stdin.once('data', () => {
+                  clearTimeout(timeout);
+                  callInitiated = true;
+                  console.log('\n📞 Call initiated manually!');
+                  resolve();
+                });
+              });
+              
+              if (callInitiated) break;
+              
+         
+            }
+            
+            if (!callInitiated) {
+              // Auto-press Enter/Call button
+              try {
+                await phoneInput.press('Enter');
+                console.log('\n📞 Auto-call initiated!');
+              } catch {
+                console.log('\n📞 Could not auto-call, please press call button manually');
+              }
+            }
+            
+            // 33-second call timer with auto-hangup
+            console.log('⏱️  Call timer started - 33 seconds');
+            console.log('Press [SPACE] to hang up early, or wait for auto-hangup');
+            
+            let hangUpEarly = false;
+            for (let timeLeft = 33; timeLeft > 0; timeLeft--) {
+              process.stdout.write(`\rCall time: ${timeLeft}s (Press SPACE to hang up) `);
+              
+              // Check for spacebar press
+       await new Promise(resolve => {
+                const timeout = setTimeout(resolve, 1000);
+                process.stdin.once('data', (key) => {
+                  if (key.toString() === ' ') {
+                    clearTimeout(timeout);
+                    hangUpEarly = true;
+                    console.log('\n🔴 Hanging up early...');
+                    resolve();
+                  }
+                });
+              });
+              
+              if (hangUpEarly) break;
+              
+    
+            }
+            
+            // Auto-hangup after 33 seconds or manual hangup
+            try {
+              const hangupSelectors = [
+                'button[aria-label*="Hang up"]',
+                'button[title*="Hang up"]', 
+                '.hangup-button',
+                'button[aria-label*="End call"]',
+                '.end-call-button'
+              ];
+              
+              let hungUp = false;
+              for (const selector of hangupSelectors) {
+                try {
+                  const hangupButton = await rcPage.$(selector);
+                  if (hangupButton) {
+                    await hangupButton.click();
+                    console.log(`\n🔴 Call ended with selector: ${selector}`);
+                    hungUp = true;
+                    break;
+                  }
+                } catch (e) {
+                  continue;
+                }
+              }
+              
+              if (!hungUp) {
+                if (hangUpEarly) {
+                  console.log('\n🔴 Manual hangup requested - please click hang up button');
+                } else {
+                  console.log('\n🔴 33 seconds completed - please click hang up button manually');
+                }
+              }
+              
+            } catch (error) {
+              console.log('\n🔴 Could not auto-hangup:', error.message);
+            }
+            
+            // Pause before next contact
+            await rcPage.waitForTimeout(1000);
+            console.log('\n✅ Call completed - moving to next contact...\n');
             found = true;
             currentStatusIndex++;
             
