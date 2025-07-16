@@ -393,6 +393,7 @@ try {
 
     // SECTION 10: PROSPECT DIALING
     // SECTION 10: INTERACTIVE STATUS SELECTOR
+while (true) {
 console.log('\n=== STATUS SELECTOR ===');
 
 const availableStatuses = [
@@ -907,69 +908,30 @@ if (prospectAnswered) {
       currentStatusIndex++; // Move to next status
       
       if (currentStatusIndex >= statusesToDial.length) {
-        console.log('\n🎉 All selected statuses completed! Returning to status selection...\n');
-        
-        // Switch back to IRS Logics to highlight table
-        await page.bringToFront();
-        await page.waitForTimeout(1000);
-        
-        // Clear all highlights
-        await frame.evaluate(() => {
-          const allRows = document.querySelectorAll('tr.k-master-row');
-          allRows.forEach(row => {
-            row.style.background = '';
-            row.style.border = '';
-          });
-        });
-        
-        // Return to status selection
-        currentStatusIndex = 0;
-        found = false;
-        
-        // Recreate status selection loop
-        console.log('\n=== STATUS SELECTOR ===');
-        selectedStatuses.clear(); // Clear previous selections
-        
-        let selecting = true;
-        while (selecting) {
-          displayStatusMenu();
-          
-          const choice = prompt('\nEnter your choice: ').trim();
-          const choiceNum = parseInt(choice);
-          
-          if (choice === '0') {
-            if (selectedStatuses.size > 0) {
-              selecting = false;
-              console.log('\nStarting to dial selected statuses...');
-              
-              // Rebuild statusesToDial array
-              statusesToDial.length = 0; // Clear array
-              selectedStatuses.forEach((count, status) => {
-                for (let i = 0; i < count; i++) {
-                  statusesToDial.push(status);
-                }
-              });
-              
-              console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatuses.size} different statuses.`);
-              currentStatusIndex = 0; // Reset to start over
-              
-            } else {
-              console.log('\nNo statuses selected! Please select at least one.');
-            }
-          } else if (choice === '99') {
-            selectedStatuses.clear();
-            console.log('\nAll selections cleared.');
-          } else if (choiceNum >= 1 && choiceNum <= availableStatuses.length) {
-            const selectedStatus = availableStatuses[choiceNum - 1];
-            const currentCount = selectedStatuses.get(selectedStatus) || 0;
-            selectedStatuses.set(selectedStatus, currentCount + 1);
-            console.log(`\nAdded: ${selectedStatus} *${currentCount + 1}`);
-          } else {
-            console.log('\nInvalid choice. Please try again.');
-          }
-        }
-        break; // Exit the main dialing loop to restart
-      }
+  console.log('\n🎉 All selected statuses completed!\n');
+  
+  // Switch back to IRS Logics to highlight table
+  await page.bringToFront();
+  await page.waitForTimeout(1000);
+  
+  // Clear all highlights
+  await frame.evaluate(() => {
+    const allRows = document.querySelectorAll('tr.k-master-row');
+    allRows.forEach(row => {
+      row.style.background = '';
+      row.style.border = '';
+    });
+  });
+  
+  // Reset for next selection
+  currentStatusIndex = 0;
+  found = false;
+  selectedStatuses.clear(); // Clear previous selections
+  statusesToDial.length = 0; // Clear the dialing array
+  
+  // Continue the main loop - this will go back to status selection
+  break;
+}
     }
   }
 
@@ -981,6 +943,7 @@ if (prospectAnswered) {
   console.log('Error finding prospects:', error.message);
 }
 
+} // End of main dialing loop
   } catch (error) {
     console.log('Script error:', error.message);
   } finally {
