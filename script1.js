@@ -490,49 +490,42 @@ console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatu
         if (cells.length > 9) {
           const status = (await cells[9].innerText()).trim();
           
-          if (status === statusesToDial[currentStatusIndex]) {
-            // Highlight row
-            await frame.evaluate(idx => {
-              const row = document.querySelectorAll('tr.k-master-row')[idx];
-              if (row) row.style.background = '#yellow';
-            }, rowIdx);
-
+ if (status === statusesToDial[currentStatusIndex]) {
             const name = (await cells[1].innerText()).trim();
             const phone = (await cells[6].innerText()).trim();
             console.log(`\nFound: ${name} - ${phone} (${status})`);
-
-            // DIALING
-            console.log('Switching to RingCentral...');
-            await rcPage.bringToFront();
-            await rcPage.waitForTimeout(1000);
             
-            try {
-              const phoneInput = await rcPage.waitForSelector('input[placeholder*="name or number"]', { timeout: 5000 });
-              await phoneInput.click({ clickCount: 3 });
-              await phoneInput.fill(phone);
-              await rcPage.waitForTimeout(500);
-              
-              try {
-                await rcPage.click('button[aria-label*="Call"]', { timeout: 3000 });
-                console.log('Call button clicked');
-              } catch {
-                await phoneInput.press('Enter');
-                console.log('Enter pressed');
+            // HIGHLIGHT the contact being dialed
+            await frame.evaluate(idx => {
+              const row = document.querySelectorAll('tr.k-master-row')[idx];
+              if (row) {
+                row.style.background = '#ffeb3b'; // Bright yellow highlight
+                row.style.border = '3px solid #ff5722'; // Orange border
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
               }
-              
-              console.log(`Calling ${phone}... Press SPACE to stop`);
-              for (let i = 30; i > 0; i--) {
-                process.stdout.write(`\rTime: ${i}s `);
-                await new Promise(resolve => setTimeout(resolve, 1000));
-              }
-              console.log('\nCall completed');
-              
-            } catch (error) {
-              console.log('Dialing error:', error.message);
-            }
+            }, rowIdx);
+
+            // Copy phone number to clipboard
+            await rcPage.evaluate((phoneNumber) => {
+              navigator.clipboard.writeText(phoneNumber).catch(() => {
+                const textArea = document.createElement('textarea');
+                textArea.value = phoneNumber;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+              });
+            }, phone);
+
+            console.log(`📞 DIALING: ${name} - ${phone}`);
+            console.log(`📋 Phone number copied to clipboard`);
+            console.log('🎯 Contact highlighted - ready for manual dialing!');
+            
+            // Pause for manual dialing
+            prompt('Press Enter after dialing this contact...');
 
             found = true;
-            currentStatusIndex++; // Move to next status in queue
+            currentStatusIndex++;
             
             if (currentStatusIndex >= statusesToDial.length) {
               console.log('\nAll selected statuses have been dialed!');
@@ -542,7 +535,7 @@ console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatu
         }
       }
 
-      if (!found) {
+ if (!found) {
         console.log(`No prospects found with selected statuses.`);
       } else if (currentStatusIndex < statusesToDial.length) {
         console.log(`\nDialed ${currentStatusIndex} out of ${statusesToDial.length} selected prospects.`);
