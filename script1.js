@@ -341,6 +341,56 @@ try {
   console.log('Navigation error:', error.message);
   prompt('Please navigate manually to FD 2 PROSPECTS and press Enter...');
 }
+
+console.log('Navigation completed! Now sorting by Status...');
+
+// Wait for the iframe to load and sort by Status
+try {
+  console.log('Looking for iframe...');
+  const frameHandle = await page.waitForSelector('#iframeRuntime', { timeout: 10000 });
+  const frame = await frameHandle.contentFrame();
+  
+  console.log('Waiting for prospects table to load...');
+  await frame.waitForSelector('tr[role="row"]', { timeout: 10000 });
+  
+  // Click on Status column header to sort
+  console.log('Clicking Status column to sort...');
+  const statusSelectors = [
+    'a[data-field="Status"]',           // From your screenshot
+    'th[data-field="Status"] a',        // More specific
+    '.k-link[data-field="Status"]',     // Using the k-link class
+    'a.k-link:has-text("Status")',      // Backup selector
+    'th:has-text("Status") a'           // Another backup
+  ];
+  
+  let statusSorted = false;
+  for (const selector of statusSelectors) {
+    try {
+      const statusHeader = await frame.$(selector);
+      if (statusHeader) {
+        await statusHeader.click();
+        console.log(`Status column clicked with selector: ${selector}`);
+        statusSorted = true;
+        await frame.waitForTimeout(2000); // Wait for sort to complete
+        break;
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  
+  if (!statusSorted) {
+    console.log('Could not sort by Status automatically');
+    prompt('Please click the Status column header to sort, then press Enter...');
+  } else {
+    console.log('Table sorted by Status successfully!');
+  }
+  
+} catch (error) {
+  console.log('Error setting up table:', error.message);
+  prompt('Please make sure you are on FD 2 PROSPECTS page and press Enter...');
+}
+
     // SECTION 10: PROSPECT DIALING
     const targetStatus = prompt('Enter the Status to dial: ').trim();
 
