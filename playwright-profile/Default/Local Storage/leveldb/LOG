@@ -1,6 +1,0 @@
-2025/07/15-20:12:35.780 15828 Reusing MANIFEST /home/lui/fdw-playwright/playwright-profile/Default/Local Storage/leveldb/MANIFEST-000001
-2025/07/15-20:12:35.787 15828 Recovering log #28
-2025/07/15-20:12:35.788 15828 Reusing old log /home/lui/fdw-playwright/playwright-profile/Default/Local Storage/leveldb/000028.log 
-2025/07/15-20:13:35.796 15829 Level-0 table #33: started
-2025/07/15-20:13:35.813 15829 Level-0 table #33: 20777 bytes OK
-2025/07/15-20:13:35.828 15829 Delete type=0 #28
