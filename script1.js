@@ -769,9 +769,242 @@ let prospectAnswered = false;
             
             // Pause before next contact
             await rcPage.waitForTimeout(1000);
-            console.log('\n✅ Call completed - moving to next contact...\n');
-            found = true;
-            currentStatusIndex++;
+            // Determine next action based on call result
+            if (prospectAnswered) {
+              console.log('\n✅ Prospect answered - moving to next contact...\n');
+              attemptCount = 0; // Reset for next prospect
+              currentStatusIndex++;
+              found = true;
+            } else {
+              // No answer - check if we should retry
+              if (attemptCount < maxAttempts) {
+                console.log(`\n🔄 No answer - preparing for attempt ${attemptCount + 1}/${maxAttempts}...`);
+                console.log('📋 Re-pasting phone number and redialing...\n');
+                
+                // Re-paste phone number and redial
+                await rcPage.bringToFront();
+                await rcPage.waitForTimeout(1000);
+                
+                // Find phone input and clear it
+                let phoneInput;
+                const inputSelectors = [
+                  'input[placeholder*="name or number"]',
+                  'input[placeholder*="Enter a name"]',
+                  '.phone-input input',
+                  'input[type="text"]',
+                  '.dialpad input'
+                ];
+                
+                for (const selector of inputSelectors) {
+                  try {
+                    phoneInput = await rcPage.$(selector);
+                    if (phoneInput) break;
+                  } catch (e) {
+                    continue;
+                  }
+                }
+                
+                if (phoneInput) {
+                  await phoneInput.click();
+                  await phoneInput.selectText(); // Select all text
+                  await phoneInput.press('Control+v'); // Paste phone number again
+                  await rcPage.waitForTimeout(500);
+                  
+                  // Auto-redial immediately (no countdown for retries)
+                  console.log('📞 Auto-redialing...');
+                  try {
+                    await phoneInput.press('Enter');
+                    console.log('📞 Redial initiated!');
+                  } catch {
+                    console.log('❌ Could not auto-redial, please press call button manually');
+                  }
+                  
+                   await rcPage.waitForTimeout(2000);
+                  
+                  console.log('🔇 Attempting to mute microphone...');
+                  const muteSelectors = [
+                    'button[aria-label*="Mute"]',
+                    'button[title*="Mute"]',
+                    'button[data-sign="muteButton"]',
+                    '.mute-button',
+                    'button[aria-label*="mute"]',
+                    '[data-testid="mute-button"]',
+                    'button:has-text("Mute")'
+                  ];
+                  
+                  let micMuted = false;
+                  for (const selector of muteSelectors) {
+                    try {
+                      const muteButton = await rcPage.$(selector);
+                      if (muteButton) {
+                        await muteButton.click();
+                        console.log(`🔇 Microphone muted with selector: ${selector}`);
+                        micMuted = true;
+                        break;
+                      }
+                    } catch (e) {
+                      continue;
+                    }
+                  }
+                  
+                  if (!micMuted) {
+                    console.log('❌ Could not auto-mute microphone - please mute manually');
+                  }
+                  
+                  // Enhanced call timer with mute and answer detection for retry
+                  console.log('⏱️  Call timer started - 33 seconds');
+                  console.log('🔇 Microphone should be muted');
+                  console.log('Press [S] if prospect ANSWERS (will unmute & stop timer)');
+                  console.log('Press [SPACE] to hang up early, or wait for auto-hangup');
+
+                  let hangUpEarly = false;
+                  let prospectAnswered = false;
+
+                  // Setup keypress detection for this retry call
+                  process.stdin.setRawMode(true);
+                  process.stdin.resume();
+                  process.stdin.setEncoding('utf8');
+
+                  for (let timeLeft = 33; timeLeft > 0; timeLeft--) {
+                    process.stdout.write(`\rCall time: ${timeLeft}s (Press [S] if answered, [SPACE] to hang up) `);
+                    
+                    // Check for keypress with 1 second timeout
+                    const keyPressed = await new Promise(resolve => {
+                      const timeout = setTimeout(() => resolve(null), 1000);
+                      
+                      const keyListener = (key) => {
+                        clearTimeout(timeout);
+                        process.stdin.removeListener('data', keyListener);
+                        resolve(key.toString());
+                      };
+                      
+                      process.stdin.once('data', keyListener);
+                    });
+                    
+                    if (keyPressed === 's' || keyPressed === 'S') {
+                      prospectAnswered = true;
+                      attemptCount = 0; // Reset attempt counter when prospect answers
+                      console.log('\n📞 PROSPECT ANSWERED! Unmuting and stopping timer...');
+                      
+                      // Try to unmute
+                      const unmuteSelectors = [
+                        'button[aria-label*="Unmute"]',
+                        'button[title*="Unmute"]',
+                        'button[aria-label*="unmute"]',
+                        '.unmute-button',
+                        ...muteSelectors // Try the same selectors (toggle)
+                      ];
+                      
+                      let unmuted = false;
+                      for (const selector of unmuteSelectors) {
+                        try {
+                          const unmuteButton = await rcPage.$(selector);
+                          if (unmuteButton) {
+                            await unmuteButton.click();
+                            console.log(`🔊 Microphone unmuted with selector: ${selector}`);
+                            unmuted = true;
+                            break;
+                          }
+                        } catch (e) {
+                          continue;
+                        }
+                      }
+                      
+                      if (!unmuted) {
+                        console.log('❌ Could not auto-unmute - please unmute manually');
+                      }
+                      
+                      console.log('✅ Call continues - prospect answered!');
+                      console.log('Press [CTRL+S] when ready to continue to next contact...');
+                      
+                      // Wait for Ctrl+S combination
+                      await new Promise(resolve => {
+                        const ctrlSListener = (key) => {
+                          // Check for Ctrl+S (key code 19)
+                          if (key.charCodeAt(0) === 19) {
+                            console.log('\n➡️ Continuing to next contact...');
+                            process.stdin.removeListener('data', ctrlSListener);
+                            resolve();
+                          }
+                        };
+                        process.stdin.on('data', ctrlSListener);
+                      });
+                      
+                      break;
+                    } else if (keyPressed === ' ') {
+                      hangUpEarly = true;
+                      console.log(`\n🔴 Hanging up early... (Attempt ${attemptCount}/${maxAttempts})`);
+                      break;
+                    }
+                  }
+
+                  // Cleanup keypress listeners for retry
+                  process.stdin.setRawMode(false);
+
+                  // Handle hangup for retry call
+                  if (!prospectAnswered) {
+                    // Auto-hangup after 33 seconds or manual hangup
+                    try {
+                      const hangupSelectors = [
+                        'button[aria-label*="Hang up"]',
+                        'button[title*="Hang up"]', 
+                        '.hangup-button',
+                        'button[aria-label*="End call"]',
+                        '.end-call-button'
+                      ];
+                      
+                      let hungUp = false;
+                      for (const selector of hangupSelectors) {
+                        try {
+                          const hangupButton = await rcPage.$(selector);
+                          if (hangupButton) {
+                            await hangupButton.click();
+                            console.log(`\n🔴 Call ended with selector: ${selector}`);
+                            hungUp = true;
+                            break;
+                          }
+                        } catch (e) {
+                          continue;
+                        }
+                      }
+                      
+                      if (!hungUp) {
+                        if (hangUpEarly) {
+                          console.log('\n🔴 Manual hangup requested - please click hang up button');
+                        } else {
+                          console.log('\n🔴 33 seconds completed - please click hang up button manually');
+                        }
+                      }
+                      
+                    } catch (error) {
+                      console.log('\n🔴 Could not auto-hangup:', error.message);
+                    }
+                  }
+                  
+                  // If prospect answered during retry, break out of retry loop
+                  if (prospectAnswered) {
+                    attemptCount = 0;
+                    currentStatusIndex++;
+                    found = true;
+                    break;
+                  }
+                  
+                  // Continue the loop to handle this retry attempt
+                  rowIdx--; // Stay on same row for retry
+                  continue; // Go back to call handling
+                } else {
+                  console.log('❌ Could not find phone input for redial');
+                  attemptCount = 0; // Reset and move to next
+                  currentStatusIndex++;
+                  found = true;
+                }
+              } else {
+                console.log(`\n❌ No answer after ${maxAttempts} attempts - moving to next contact...\n`);
+                attemptCount = 0; // Reset for next prospect
+                currentStatusIndex++;
+                found = true;
+              }
+            }
             
             if (currentStatusIndex >= statusesToDial.length) {
               console.log('\nAll selected statuses have been dialed!');
@@ -781,7 +1014,7 @@ let prospectAnswered = false;
         }
       }
 
- if (!found) {
+      if (!found) {
         console.log(`No prospects found with selected statuses.`);
       } else if (currentStatusIndex < statusesToDial.length) {
         console.log(`\nDialed ${currentStatusIndex} out of ${statusesToDial.length} selected prospects.`);
