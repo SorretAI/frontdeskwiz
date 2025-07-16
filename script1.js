@@ -186,13 +186,7 @@ browserContext = await chromium.launchPersistentContext(USER_DATA_DIR, {
     console.log(`Page title: ${title}`);
     console.log(`Page URL: ${url}`);
     
-    // Take screenshot
-    try {
-      await page.screenshot({ path: 'debug-page.png' });
-      console.log('Screenshot saved as debug-page.png');
-    } catch (e) {
-      console.log('Could not save screenshot');
-    }
+
 
     // SECTION 5: CHECK LOGIN STATUS
     let needsIRSLogin = false;
@@ -270,14 +264,9 @@ browserContext = await chromium.launchPersistentContext(USER_DATA_DIR, {
     }
 
     // SECTION 8: SAVE SESSIONS
-    if (needsIRSLogin || needsRCLogin) {
-      console.log('Saving sessions...');
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await rcPage.reload({ waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(3000);
-      console.log('Sessions saved for next time!');
-    }
-
+if (needsIRSLogin || needsRCLogin) {
+  console.log('Sessions will be saved automatically for next time!');
+}
     // SECTION 9: NAVIGATION
     console.log('\n=== NAVIGATION ===');
     await page.bringToFront();
