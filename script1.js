@@ -517,13 +517,52 @@ console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatu
               });
             }, phone);
 
-            console.log(`📞 DIALING: ${name} - ${phone}`);
+         console.log(`📞 DIALING: ${name} - ${phone}`);
             console.log(`📋 Phone number copied to clipboard`);
-            console.log('🎯 Contact highlighted - ready for manual dialing!');
+            console.log('🎯 Contact highlighted - switching to RingCentral...');
             
-            // Pause for manual dialing
-            prompt('Press Enter after dialing this contact...');
-
+            // Switch back to RingCentral tab
+            await rcPage.bringToFront();
+            await rcPage.waitForTimeout(1000);
+            
+            // Find the phone input field and paste
+            console.log('🔍 Looking for phone input field...');
+            const inputSelectors = [
+              'input[placeholder*="name or number"]',
+              'input[placeholder*="Enter a name"]',
+              '.phone-input input',
+              'input[type="text"]',
+              '.dialpad input'
+            ];
+            
+            let phoneInput;
+            for (const selector of inputSelectors) {
+              try {
+                phoneInput = await rcPage.$(selector);
+                if (phoneInput) {
+                  console.log(`📱 Found input field with selector: ${selector}`);
+                  break;
+                }
+              } catch (e) {
+                continue;
+              }
+            }
+            
+            if (phoneInput) {
+              // Clear field and paste phone number
+              await phoneInput.click();
+              await phoneInput.press('Control+v'); // Paste from clipboard
+              await rcPage.waitForTimeout(500);
+              
+              console.log(`✅ Phone number ${phone} pasted successfully!`);
+              console.log('☎️ Ready to call - press the green call button when ready');
+            } else {
+              console.log('❌ Could not find phone input field');
+              console.log('📋 Phone number is in clipboard - paste manually with Ctrl+V');
+            }
+            
+            // Pause for manual calling
+            prompt('Press Enter after making the call...');
             found = true;
             currentStatusIndex++;
             
