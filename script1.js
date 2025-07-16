@@ -482,6 +482,8 @@ console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatu
       console.log(`Found ${rows.length} rows. Searching for selected statuses...`);
       let currentStatusIndex = 0;
       let found = false;
+      let attemptCount = 0; // Track attempts for current prospect
+      const maxAttempts = 3; // Maximum attempts per prospect
       
       for (let rowIdx = 0; rowIdx < rows.length && currentStatusIndex < statusesToDial.length; rowIdx++) {
         const row = rows[rowIdx];
@@ -493,7 +495,13 @@ console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatu
  if (status === statusesToDial[currentStatusIndex]) {
             const name = (await cells[1].innerText()).trim();
             const phone = (await cells[6].innerText()).trim();
-            console.log(`\nFound: ${name} - ${phone} (${status})`);
+            // Reset attempt count for new prospect
+            if (attemptCount === 0) {
+              console.log(`\nFound: ${name} - ${phone} (${status})`);
+            }
+            
+            attemptCount++;
+            console.log(`\n📞 ATTEMPT ${attemptCount}/${maxAttempts}: ${name} - ${phone}`);
             
             // HIGHLIGHT the contact being dialed
             await frame.evaluate(idx => {
@@ -593,68 +601,170 @@ console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatu
                 console.log('\n📞 Could not auto-call, please press call button manually');
               }
             }
+//Here after the call is initiated, we handle the keypress for muting and detecting prospect answer
+             await rcPage.waitForTimeout(2000); // Wait for call interface to load
             
-            // 33-second call timer with auto-hangup
-            console.log('⏱️  Call timer started - 33 seconds');
-            console.log('Press [SPACE] to hang up early, or wait for auto-hangup');
+            console.log('🔇 Attempting to mute microphone...');
+            const muteSelectors = [
+              'button[aria-label*="Mute"]',
+              'button[title*="Mute"]',
+              'button[data-sign="muteButton"]',
+              '.mute-button',
+              'button[aria-label*="mute"]',
+              '[data-testid="mute-button"]',
+              'button:has-text("Mute")'
+            ];
             
-            let hangUpEarly = false;
-            for (let timeLeft = 33; timeLeft > 0; timeLeft--) {
-              process.stdout.write(`\rCall time: ${timeLeft}s (Press SPACE to hang up) `);
-              
-              // Check for spacebar press
-       await new Promise(resolve => {
-                const timeout = setTimeout(resolve, 1000);
-                process.stdin.once('data', (key) => {
-                  if (key.toString() === ' ') {
-                    clearTimeout(timeout);
-                    hangUpEarly = true;
-                    console.log('\n🔴 Hanging up early...');
-                    resolve();
-                  }
-                });
-              });
-              
-              if (hangUpEarly) break;
-              
-    
+            let micMuted = false;
+            for (const selector of muteSelectors) {
+              try {
+                const muteButton = await rcPage.$(selector);
+                if (muteButton) {
+                  await muteButton.click();
+                  console.log(`🔇 Microphone muted with selector: ${selector}`);
+                  micMuted = true;
+                  break;
+                }
+              } catch (e) {
+                continue;
+              }
             }
             
-            // Auto-hangup after 33 seconds or manual hangup
-            try {
-              const hangupSelectors = [
-                'button[aria-label*="Hang up"]',
-                'button[title*="Hang up"]', 
-                '.hangup-button',
-                'button[aria-label*="End call"]',
-                '.end-call-button'
-              ];
+            if (!micMuted) {
+              console.log('❌ Could not auto-mute microphone - please mute manually');
+            }
+  
+            
+// Enhanced call timer with mute and answer detection
+console.log('⏱️  Call timer started - 33 seconds');
+console.log('🔇 Microphone should be muted');
+console.log('Press [S] if prospect ANSWERS (will unmute & stop timer)');
+console.log('Press [SPACE] to hang up early, or wait for auto-hangup');
+
+let hangUpEarly = false;
+let prospectAnswered = false;
+
+ // Setup keypress detection for this call
+            process.stdin.setRawMode(true);
+            process.stdin.resume();
+            process.stdin.setEncoding('utf8');
+
+            for (let timeLeft = 33; timeLeft > 0; timeLeft--) {
+              process.stdout.write(`\rCall time: ${timeLeft}s (Press [S] if answered, [SPACE] to hang up) `);
               
-              let hungUp = false;
-              for (const selector of hangupSelectors) {
-                try {
-                  const hangupButton = await rcPage.$(selector);
-                  if (hangupButton) {
-                    await hangupButton.click();
-                    console.log(`\n🔴 Call ended with selector: ${selector}`);
-                    hungUp = true;
-                    break;
+              // Check for keypress with 1 second timeout
+              const keyPressed = await new Promise(resolve => {
+                const timeout = setTimeout(() => resolve(null), 1000);
+                
+                const keyListener = (key) => {
+                  clearTimeout(timeout);
+                  process.stdin.removeListener('data', keyListener);
+                  resolve(key.toString());
+                };
+                
+                process.stdin.once('data', keyListener);
+              });
+              
+              if (keyPressed === 's' || keyPressed === 'S') {
+                prospectAnswered = true;
+                attemptCount = 0; // Reset attempt counter when prospect answers
+                console.log('\n📞 PROSPECT ANSWERED! Unmuting and stopping timer...');
+                
+                // Try to unmute
+                const unmuteSelectors = [
+                  'button[aria-label*="Unmute"]',
+                  'button[title*="Unmute"]',
+                  'button[aria-label*="unmute"]',
+                  '.unmute-button',
+                  ...muteSelectors // Try the same selectors (toggle)
+                ];
+                
+                let unmuted = false;
+                for (const selector of unmuteSelectors) {
+                  try {
+                    const unmuteButton = await rcPage.$(selector);
+                    if (unmuteButton) {
+                      await unmuteButton.click();
+                      console.log(`🔊 Microphone unmuted with selector: ${selector}`);
+                      unmuted = true;
+                      break;
+                    }
+                  } catch (e) {
+                    continue;
                   }
-                } catch (e) {
-                  continue;
                 }
-              }
-              
-              if (!hungUp) {
-                if (hangUpEarly) {
-                  console.log('\n🔴 Manual hangup requested - please click hang up button');
-                } else {
-                  console.log('\n🔴 33 seconds completed - please click hang up button manually');
+                
+                if (!unmuted) {
+                  console.log('❌ Could not auto-unmute - please unmute manually');
                 }
+                
+                console.log('✅ Call continues - prospect answered!');
+                console.log('Press [CTRL+S] when ready to continue to next contact...');
+                
+                // Wait for Ctrl+S combination
+                await new Promise(resolve => {
+                  const ctrlSListener = (key) => {
+                    // Check for Ctrl+S (key code 19)
+                    if (key.charCodeAt(0) === 19) {
+                      console.log('\n➡️ Continuing to next contact...');
+                      process.stdin.removeListener('data', ctrlSListener);
+                      resolve();
+                    }
+                  };
+                  process.stdin.on('data', ctrlSListener);
+                });
+                
+                break;
+              } else if (keyPressed === ' ') {
+                hangUpEarly = true;
+                console.log(`\n🔴 Hanging up early... (Attempt ${attemptCount}/${maxAttempts})`);
+                break;
               }
-              
-            } catch (error) {
-              console.log('\n🔴 Could not auto-hangup:', error.message);
+            }
+
+            // Cleanup keypress listeners
+            process.stdin.setRawMode(false);
+
+            // Only auto-hangup if prospect didn't answer
+            if (!prospectAnswered) {
+              // Auto-hangup after 33 seconds or manual hangup
+              try {
+                const hangupSelectors = [
+                  'button[aria-label*="Hang up"]',
+                  'button[title*="Hang up"]', 
+                  '.hangup-button',
+                  'button[aria-label*="End call"]',
+                  '.end-call-button'
+                ];
+                
+                let hungUp = false;
+                for (const selector of hangupSelectors) {
+                  try {
+                    const hangupButton = await rcPage.$(selector);
+                    if (hangupButton) {
+                      await hangupButton.click();
+                      console.log(`\n🔴 Call ended with selector: ${selector}`);
+                      hungUp = true;
+                      break;
+                    }
+                  } catch (e) {
+                    continue;
+                  }
+                }
+                
+                if (!hungUp) {
+                  if (hangUpEarly) {
+                    console.log('\n🔴 Manual hangup requested - please click hang up button');
+                  } else {
+                    console.log('\n🔴 33 seconds completed - please click hang up button manually');
+                  }
+                }
+                
+              } catch (error) {
+                console.log('\n🔴 Could not auto-hangup:', error.message);
+              }
+            } else {
+              console.log('\n📞 Call ended by user - continuing to next contact...');
             }
             
             // Pause before next contact
