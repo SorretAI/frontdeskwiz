@@ -128,6 +128,92 @@ async function loginToIRSLogics(page, email, password) {
     return false;
   }
 }
+async function findCaseAndGetStatus(frame, caseNumber) {
+  console.log(`🔍 Looking for case number: ${caseNumber}`);
+  
+  try {
+    // Get all rows
+    const rows = await frame.$$('tr.k-master-row');
+    
+    for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
+      const row = rows[rowIdx];
+      const cells = await row.$$('td');
+      
+      if (cells.length > 9) {
+        // Assuming case number is in the first column (index 0)
+        const caseCell = (await cells[0].innerText()).trim();
+        
+        if (caseCell === caseNumber || caseCell.includes(caseNumber)) {
+          const name = (await cells[1].innerText()).trim();
+          const phone = (await cells[6].innerText()).trim();
+          const status = (await cells[9].innerText()).trim();
+          
+          console.log(`✅ Found case: ${caseNumber}`);
+          console.log(`   Name: ${name}`);
+          console.log(`   Phone: ${phone}`);
+          console.log(`   Status: ${status}`);
+          
+          return {
+            rowIndex: rowIdx,
+            caseNumber: caseCell,
+            name: name,
+            phone: phone,
+            status: status,
+            found: true
+          };
+        }
+      }
+    }
+    
+    console.log(`❌ Case number ${caseNumber} not found`);
+    return { found: false };
+    
+  } catch (error) {
+    console.log(`Error finding case: ${error.message}`);
+    return { found: false };
+  }
+}
+
+// NEW FUNCTION: Get all remaining cases with the same status starting from a specific row
+async function getCasesWithSameStatus(frame, startRowIndex, targetStatus) {
+  console.log(`🔍 Looking for more cases with status: ${targetStatus} starting from row ${startRowIndex}`);
+  
+  try {
+    const rows = await frame.$$('tr.k-master-row');
+    const matchingCases = [];
+    
+    // Start from the specified row index
+    for (let rowIdx = startRowIndex; rowIdx < rows.length; rowIdx++) {
+      const row = rows[rowIdx];
+      const cells = await row.$$('td');
+      
+      if (cells.length > 9) {
+        const status = (await cells[9].innerText()).trim();
+        
+        if (status === targetStatus) {
+          const caseNumber = (await cells[0].innerText()).trim();
+          const name = (await cells[1].innerText()).trim();
+          const phone = (await cells[6].innerText()).trim();
+          
+          matchingCases.push({
+            rowIndex: rowIdx,
+            caseNumber: caseNumber,
+            name: name,
+            phone: phone,
+            status: status
+          });
+        }
+      }
+    }
+    
+    console.log(`✅ Found ${matchingCases.length} cases with status: ${targetStatus}`);
+    return matchingCases;
+    
+  } catch (error) {
+    console.log(`Error getting cases with same status: ${error.message}`);
+    return [];
+  }
+}
 // MAIN SCRIPT
 (async () => {
   let browserContext;
@@ -472,7 +558,6 @@ console.log(`\nWill dial ${statusesToDial.length} prospects from ${selectedStatu
     // FIXED DIALING SECTION - Replace the entire dialing logic with this
 
 // Get frame and rows for dialing
-console.log('Looking for prospects...');
 let frameHandle, frame;
 
 try {
@@ -481,7 +566,6 @@ try {
   
   await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
   
-  console.log('Starting dialing process...');
   let currentStatusIndex = 0;
   let found = false;
   const maxAttempts = 3; // Maximum attempts per prospect
@@ -494,8 +578,7 @@ try {
     
     // Get fresh row data
     const rows = await frame.$$('tr.k-master-row');
-    console.log(`Found ${rows.length} rows total`);
-    
+      
     let prospectFound = false;
     
     for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
@@ -561,10 +644,7 @@ try {
           });
         }, currentPhone); // Use currentPhone instead of phone
 
-        console.log(`📞 DIALING: ${currentName} - ${currentPhone}`);
-        console.log(`📋 Phone number copied to clipboard`);
-        console.log('🎯 Contact highlighted - switching to RingCentral...');
-        
+        console.log(`📞 DIALING: ${currentName} - ${currentPhone}`);      
         // Continue with rest of dialing logic...
         // [Keep all the RingCentral dialing code the same]
 
@@ -573,7 +653,6 @@ try {
             await rcPage.waitForTimeout(1000);
             
             // Find the phone input field and paste
-            console.log('🔍 Looking for phone input field...');
             const inputSelectors = [
               'input[placeholder*="name or number"]',
               'input[placeholder*="Enter a name"]',
@@ -602,8 +681,7 @@ try {
               await phoneInput.press('Control+v'); // Paste from clipboard
               await rcPage.waitForTimeout(500);
               
-              console.log(`✅ Phone number ${currentPhone} pasted successfully!`);
-              console.log('☎️ Ready to call - press the green call button when ready');
+             
             } else {
               console.log('❌ Could not find phone input field');
               console.log('📋 Phone number is in clipboard - paste manually with Ctrl+V');
@@ -611,7 +689,7 @@ try {
             
             // Auto-call logic
             if (attemptCount === 1) {
-              console.log('📞 Press ENTER to call, or wait 3 seconds for auto-call...');
+             
               
               // 3 second countdown to press Enter or auto-call
               let callInitiated = false;
@@ -624,7 +702,6 @@ try {
                   process.stdin.once('data', () => {
                     clearTimeout(timeout);
                     callInitiated = true;
-                    console.log('\n📞 Call initiated manually!');
                     resolve();
                   });
                 });
@@ -636,17 +713,17 @@ try {
                 // Auto-press Enter/Call button
                 try {
                   await phoneInput.press('Enter');
-                  console.log('\n📞 Auto-call initiated!');
+                  
                 } catch {
                   console.log('\n📞 Could not auto-call, please press call button manually');
                 }
               }
             } else {
               // For retries, auto-dial immediately
-              console.log('📞 Auto-redialing...');
+              
               try {
                 await phoneInput.press('Enter');
-                console.log('📞 Redial initiated!');
+              
               } catch {
                 console.log('❌ Could not auto-redial, please press call button manually');
               }
@@ -655,7 +732,7 @@ try {
             // Wait for call interface to load
             await rcPage.waitForTimeout(2000);
             
-            console.log('🔇 Attempting to mute microphone...');
+            
             const muteSelectors = [
               'button[aria-label*="Mute"]',
               'button[title*="Mute"]',
@@ -672,7 +749,7 @@ try {
                 const muteButton = await rcPage.$(selector);
                 if (muteButton) {
                   await muteButton.click();
-                  console.log(`🔇 Microphone muted with selector: ${selector}`);
+            
                   micMuted = true;
                   break;
                 }
