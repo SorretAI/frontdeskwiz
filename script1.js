@@ -658,9 +658,14 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
           currentRow.style.background = '#ffeb3b';
           currentRow.style.border = '3px solid #ff5722';
           currentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          // Add single click on the row
+            // First click to select the row
           currentRow.click();
-        }
+    
+          // Wait 1 second, then second click to open notes/details
+          setTimeout(() => {
+            currentRow.click();
+            }, 1000);
+          }
       }, prospect.rowIndex);
 
       // Copy phone to clipboard
@@ -976,10 +981,10 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
   console.log('\n🎉 Case number mode dialing completed!\n');
   
 } else {
-  // STATUS MODE DIALING - Convert selected statuses to array for dialing
+  // STATUS MODE DIALING - FIXED VERSION WITH PROPER COUNTING AND LOOP TERMINATION
   console.log('\n📞 Starting status-based dialing...');
   
-  // Get frame and rows for dialing 
+  // Get frame and rows for dialing
   let frameHandle, frame;
   
   try {
@@ -989,7 +994,6 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
     await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
     
     let currentStatusIndex = 0;
-    let found = false;
     const maxAttempts = 3; // Maximum attempts per prospect
     
     // Convert selected statuses to array for dialing
@@ -1001,12 +1005,12 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
     });
     
     while (currentStatusIndex < statusesToDial.length) {
-      console.log(`\nSearching for prospects with status: ${statusesToDial[currentStatusIndex]}`);
+      const currentStatus = statusesToDial[currentStatusIndex];
+      console.log(`\nSearching for prospects with status: ${currentStatus}`);
       
-      // Get fresh row data
+      // GET ALL PROSPECTS WITH THIS STATUS FIRST (like case number mode)
       const rows = await frame.$$('tr.k-master-row');
-        
-      let prospectFound = false;
+      const prospectsWithThisStatus = [];
       
       for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
         const row = rows[rowIdx];
@@ -1015,406 +1019,413 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
         if (cells.length > 9) {
           const status = (await cells[9].innerText()).trim();
           
-          if (status === statusesToDial[currentStatusIndex]) {
+          if (status === currentStatus) {
+            const caseNumber = (await cells[0].innerText()).trim();
             const name = (await cells[1].innerText()).trim();
             const phone = (await cells[6].innerText()).trim();
             
-            console.log(`\nFound prospect: ${name} - ${phone} (${status})`);
-            prospectFound = true;
-            
-            // Dial this prospect up to 3 times
-            let attemptCount = 0;
-            let prospectAnswered = false;
-            let shouldSkip = false;
-            let returnToMainMenu = false;
-            
-            while (attemptCount < maxAttempts && !prospectAnswered && !shouldSkip) {
-              attemptCount++;
-              console.log(`\n📞 ATTEMPT ${attemptCount}/${maxAttempts}: ${name} - ${phone}`);
-              
-              // IMPORTANT: Get fresh contact info for each attempt
-              const currentRow = rows[rowIdx];
-              const currentCells = await currentRow.$$('td');
-              const currentName = (await currentCells[1].innerText()).trim();
-              const currentPhone = (await currentCells[6].innerText()).trim();
-              
-              // Switch to IRS Logics tab to highlight contact
-              await page.bringToFront();
-              await page.waitForTimeout(500);
-              
-              // CLEAR previous highlights and HIGHLIGHT current contact
-              await frame.evaluate(idx => {
-                // Clear all previous highlights
-                const allRows = document.querySelectorAll('tr.k-master-row');
-                allRows.forEach(row => {
-                  row.style.background = '';
-                  row.style.border = '';
-                });
-                
-                // Highlight current row
-                const currentRow = allRows[idx];
-                if (currentRow) {
-                  currentRow.style.background = '#ffeb3b'; // Bright yellow highlight
-                  currentRow.style.border = '3px solid #ff5722'; // Orange border
-                  currentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                  // Add single click on the row
-                  currentRow.click();
-                }
-              }, rowIdx);
-
-              // Copy phone number to clipboard - USE CURRENT PHONE
-              await rcPage.evaluate((phoneNumber) => {
-                navigator.clipboard.writeText(phoneNumber).catch(() => {
-                  const textArea = document.createElement('textarea');
-                  textArea.value = phoneNumber;
-                  document.body.appendChild(textArea);
-                  textArea.select();
-                  document.execCommand('copy');
-                  document.body.removeChild(textArea);
-                });
-              }, currentPhone); // Use currentPhone instead of phone
-
-              console.log(`📞 DIALING: ${currentName} - ${currentPhone}`);      
-              
-              // [Continue with the same RingCentral dialing logic as the case number mode...]
-              // You can copy the entire RingCentral dialing section from the case number mode
-              
-              // Switch back to RingCentral tab
-              await rcPage.bringToFront();
-              await rcPage.waitForTimeout(1000);
-              
-              // Find the phone input field and paste
-              const inputSelectors = [
-                'input[placeholder*="name or number"]',
-                'input[placeholder*="Enter a name"]',
-                '.phone-input input',
-                'input[type="text"]',
-                '.dialpad input'
-              ];
-              
-              let phoneInput;
-              for (const selector of inputSelectors) {
-                try {
-                  phoneInput = await rcPage.$(selector);
-                  if (phoneInput) {
-                    console.log(`📱 Found input field with selector: ${selector}`);
-                    break;
-                  }
-                } catch (e) {
-                  continue;
-                }
-              }
-              
-              if (phoneInput) {
-                // Clear field and paste phone number
-                await phoneInput.click();
-                await phoneInput.selectText(); // Clear existing content
-                await phoneInput.press('Control+v'); // Paste from clipboard
-                await rcPage.waitForTimeout(500);
-              } else {
-                console.log('❌ Could not find phone input field');
-                console.log('📋 Phone number is in clipboard - paste manually with Ctrl+V');
-              }
-              
-              // Auto-call logic
-              if (attemptCount === 1) {
-                // 3 second countdown to press Enter or auto-call
-                let callInitiated = false;
-                for (let i = 3; i > 0; i--) {
-                  process.stdout.write(`\rAuto-call in ${i}s... (Press ENTER to call now) `);
-                  
-                  // Check if Enter was pressed
-                  await new Promise(resolve => {
-                    const timeout = setTimeout(resolve, 1000);
-                    process.stdin.once('data', () => {
-                      clearTimeout(timeout);
-                      callInitiated = true;
-                      resolve();
-                    });
-                  });
-                  
-                  if (callInitiated) break;
-                }
-                
-                if (!callInitiated) {
-                  // Auto-press Enter/Call button
-                  try {
-                    await phoneInput.press('Enter');
-                  } catch {
-                    console.log('\n📞 Could not auto-call, please press call button manually');
-                  }
-                }
-              } else {
-                // For retries, auto-dial immediately
-                try {
-                  await phoneInput.press('Enter');
-                } catch {
-                  console.log('❌ Could not auto-redial, please press call button manually');
-                }
-              }
-
-              // Wait for call interface to load
-              await rcPage.waitForTimeout(2000);
-              
-              const muteSelectors = [
-                'button[aria-label*="Mute"]',
-                'button[title*="Mute"]',
-                'button[data-sign="muteButton"]',
-                '.mute-button',
-                'button[aria-label*="mute"]',
-                '[data-testid="mute-button"]',
-                'button:has-text("Mute")'
-              ];
-              
-              let micMuted = false;
-              for (const selector of muteSelectors) {
-                try {
-                  const muteButton = await rcPage.$(selector);
-                  if (muteButton) {
-                    await muteButton.click();
-                    micMuted = true;
-                    break;
-                  }
-                } catch (e) {
-                  continue;
-                }
-              }
-              
-              if (!micMuted) {
-                console.log('❌ Could not auto-mute microphone - please mute manually');
-              }
-
-              // Enhanced call timer with mute and answer detection
-              console.log('⏱️  Call timer started - 33 seconds');
-              console.log('🔇 Microphone should be muted');
-              console.log('Press [S] if prospect ANSWERS (will unmute & stop timer)');
-              console.log('Press [SPACE] to hang up early, or wait for auto-hangup');
-              console.log('Press [K] to skip to next prospect');
-              console.log('Press [B] to go back to main menu');
-
-              let hangUpEarly = false;
-              let callAnswered = false;
-              let skipPressed = false;
-
-              // Setup keypress detection for this call
-              process.stdin.setRawMode(true);
-              process.stdin.resume();
-              process.stdin.setEncoding('utf8');
-
-              for (let timeLeft = 33; timeLeft > 0; timeLeft--) {
-                process.stdout.write(`\rCall time: ${timeLeft}s (Press [S] if answered, [SPACE] to hang up, [K] to skip), [B] for menu) `);
-                
-                // Check for keypress with 1 second timeout
-                const keyPressed = await new Promise(resolve => {
-                  const timeout = setTimeout(() => resolve(null), 1000);
-                  
-                  const keyListener = (key) => {
-                    clearTimeout(timeout);
-                    process.stdin.removeListener('data', keyListener);
-                    resolve(key.toString());
-                  };
-                  
-                  process.stdin.once('data', keyListener);
-                });
-                
-
-                if (keyPressed === 'b' || keyPressed === 'B') {
-                  console.log('\n🔄 RETURNING TO MAIN MENU...');
-                  skipPressed = true;
-                  shouldSkip = true;
-  
-                  // Set a flag to break out of all loops and return to main menu
-                  returnToMainMenu = true;
-                  break;
-                } else if (keyPressed === 'k' || keyPressed === 'K') {
-                  console.log('\n⏭️ SKIPPING CONTACT - Moving to next prospect...');
-                  skipPressed = true;
-                  shouldSkip = true;
-                  break;
-                } else if (keyPressed === 's' || keyPressed === 'S') {
-                  callAnswered = true;
-                  prospectAnswered = true;
-                  console.log('\n📞 PROSPECT ANSWERED! Unmuting and stopping timer...');
-                  
-                  // Try to unmute
-                  const unmuteSelectors = [
-                    'button[aria-label*="Unmute"]',
-                    'button[title*="Unmute"]',
-                    'button[aria-label*="unmute"]',
-                    '.unmute-button',
-                    ...muteSelectors // Try the same selectors (toggle)
-                  ];
-                  
-                  let unmuted = false;
-                  for (const selector of unmuteSelectors) {
-                    try {
-                      const unmuteButton = await rcPage.$(selector);
-                      if (unmuteButton) {
-                        await unmuteButton.click();
-                        console.log(`🔊 Microphone unmuted with selector: ${selector}`);
-                        unmuted = true;
-                        break;
-                      }
-                    } catch (e) {
-                      continue;
-                    }
-                  }
-                  
-                  if (!unmuted) {
-                    console.log('❌ Could not auto-unmute - please unmute manually');
-                  }
-                  
-                  console.log('✅ Call continues - prospect answered!');
-                  console.log('Press [CTRL+S] when ready to continue to next contact...');
-                  
-                  // Wait for Ctrl+S combination
-                  await new Promise(resolve => {
-                    const ctrlSListener = (key) => {
-                      // Check for Ctrl+S (key code 19)
-                      if (key.charCodeAt(0) === 19) {
-                        console.log('\n➡️ Continuing to next contact...');
-                        process.stdin.removeListener('data', ctrlSListener);
-                        resolve();
-                      }
-                    };
-                    process.stdin.on('data', ctrlSListener);
-                  });
-                  
-                  break;
-                } else if (keyPressed === ' ') {
-                  hangUpEarly = true;
-                  console.log(`\n🔴 Hanging up early... (Attempt ${attemptCount}/${maxAttempts})`);
-                  break;
-                }
-              }
-
-              // Cleanup keypress listeners
-              try {
-                process.stdin.setRawMode(false);
-                process.stdin.removeAllListeners('data');
-              } catch (e) {
-                // Ignore cleanup errors
-              }
-
-              // Handle hangup
-              if (!callAnswered && !skipPressed) {
-                // Auto-hangup after 33 seconds or manual hangup
-                try {
-                  const hangupSelectors = [
-                    'button[aria-label*="Hang up"]',
-                    'button[title*="Hang up"]', 
-                    '.hangup-button',
-                    'button[aria-label*="End call"]',
-                    '.end-call-button'
-                  ];
-                  
-                  let hungUp = false;
-                  for (const selector of hangupSelectors) {
-                    try {
-                      const hangupButton = await rcPage.$(selector);
-                      if (hangupButton) {
-                        await hangupButton.click();
-                        console.log(`\n🔴 Call ended with selector: ${selector}`);
-                        hungUp = true;
-                        break;
-                      }
-                    } catch (e) {
-                      continue;
-                    }
-                  }
-                  
-                  if (!hungUp) {
-                    if (hangUpEarly) {
-                      console.log('\n🔴 Manual hangup requested - please click hang up button');
-                    } else {
-                      console.log('\n🔴 33 seconds completed - please click hang up button manually');
-                    }
-                  }
-                  
-                } catch (error) {
-                  console.log('\n🔴 Could not auto-hangup:', error.message);
-                }
-              } else if (skipPressed) {
-                // Handle skip hangup
-                try {
-                  const hangupSelectors = [
-                    'button[aria-label*="Hang up"]',
-                    'button[title*="Hang up"]', 
-                    '.hangup-button',
-                    'button[aria-label*="End call"]',
-                    '.end-call-button'
-                  ];
-                  
-                  for (const selector of hangupSelectors) {
-                    try {
-                      const hangupButton = await rcPage.$(selector);
-                      if (hangupButton) {
-                        await hangupButton.click();
-                        console.log(`🔴 Call ended for skip`);
-                        break;
-                      }
-                    } catch (e) {
-                      continue;
-                    }
-                  }
-                } catch (error) {
-                  console.log('Could not auto-hangup for skip');
-                }
-              }
-              
-              // Pause before next attempt/contact
-              await rcPage.waitForTimeout(1000);
-              
-              // If prospect answered or skip pressed, break the attempt loop
-              if (prospectAnswered || shouldSkip || returnToMainMenu) {
-                break;
-              }
-            }
-            
-            // After finishing all attempts for this prospect
-            if (prospectAnswered) {
-              console.log('\n✅ Prospect answered - moving to next contact...\n');
-            } else if (shouldSkip) {
-              console.log('\n⏭️ Contact skipped - moving to next contact...\n');
-            } else {
-              console.log(`\n❌ No answer after ${maxAttempts} attempts - moving to next contact...\n`);
-            }
-            if (returnToMainMenu) {
-              console.log('\n🔄 Exiting status-based dialing - returning to main menu...\n');
-              break; // This breaks out of the status loop
-            }
+            prospectsWithThisStatus.push({
+              rowIndex: rowIdx,
+              caseNumber: caseNumber,
+              name: name,
+              phone: phone,
+              status: status
+            });
           }
         }
       }
-     
-      if (returnToMainMenu) {
-        break; // Break out of the while (currentStatusIndex < statusesToDial.length) loop
-      }
-      if (!prospectFound) {
-        console.log(`\n🔄 No more contacts with status: ${statusesToDial[currentStatusIndex]}`);
+      
+      if (prospectsWithThisStatus.length === 0) {
+        console.log(`\n🔄 No prospects found with status: ${currentStatus}`);
         currentStatusIndex++; // Move to next status
+        continue;
+      }
+      
+      console.log(`\n📞 Found ${prospectsWithThisStatus.length} prospects with status: ${currentStatus}`);
+      
+      // DIAL ALL PROSPECTS WITH THIS STATUS
+      for (let prospectIndex = 0; prospectIndex < prospectsWithThisStatus.length; prospectIndex++) {
+        const prospect = prospectsWithThisStatus[prospectIndex];
         
-        if (currentStatusIndex >= statusesToDial.length) {
-          console.log('\n🎉 All selected statuses completed!\n');
+        console.log(`\n📞 Dialing prospect ${prospectIndex + 1}/${prospectsWithThisStatus.length}:`);
+        console.log(`   Case: ${prospect.caseNumber}`);
+        console.log(`   Name: ${prospect.name}`);
+        console.log(`   Phone: ${prospect.phone}`);
+        console.log(`   Status: ${prospect.status}`);
+        
+        // Dial this prospect up to 3 times
+        let attemptCount = 0;
+        let prospectAnswered = false;
+        let shouldSkip = false;
+        let returnToMainMenu = false;
+        
+        while (attemptCount < maxAttempts && !prospectAnswered && !shouldSkip) {
+          attemptCount++;
+          console.log(`\n📞 ATTEMPT ${attemptCount}/${maxAttempts}: ${prospect.name} - ${prospect.phone}`);
           
-          // Switch back to IRS Logics to highlight table
+          // Switch to IRS Logics tab to highlight contact
           await page.bringToFront();
-          await page.waitForTimeout(1000);
+          await page.waitForTimeout(500);
           
-          // Clear all highlights
-          await frame.evaluate(() => {
+          // Highlight the specific row
+          await frame.evaluate(idx => {
             const allRows = document.querySelectorAll('tr.k-master-row');
             allRows.forEach(row => {
               row.style.background = '';
               row.style.border = '';
             });
-          });
+            
+            const currentRow = allRows[idx];
+            if (currentRow) {
+              currentRow.style.background = '#ffeb3b';
+              currentRow.style.border = '3px solid #ff5722';
+              currentRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              // First click to select the row
+              currentRow.click();
+    
+              // Wait 1 second, then second click to open notes/details
+              setTimeout(() => {
+                currentRow.click();
+              }, 1000);
+            }
+          }, prospect.rowIndex);
+
+          // Copy phone to clipboard
+          await rcPage.evaluate((phoneNumber) => {
+            navigator.clipboard.writeText(phoneNumber).catch(() => {
+              const textArea = document.createElement('textarea');
+              textArea.value = phoneNumber;
+              document.body.appendChild(textArea);
+              textArea.select();
+              document.execCommand('copy');
+              document.body.removeChild(textArea);
+            });
+          }, prospect.phone);
+
+          console.log(`📞 DIALING: ${prospect.name} - ${prospect.phone}`);
           
-          break;
+          // Switch back to RingCentral tab
+          await rcPage.bringToFront();
+          await rcPage.waitForTimeout(1000);
+          
+          // Find the phone input field and paste
+          const inputSelectors = [
+            'input[placeholder*="name or number"]',
+            'input[placeholder*="Enter a name"]',
+            '.phone-input input',
+            'input[type="text"]',
+            '.dialpad input'
+          ];
+          
+          let phoneInput;
+          for (const selector of inputSelectors) {
+            try {
+              phoneInput = await rcPage.$(selector);
+              if (phoneInput) {
+                console.log(`📱 Found input field with selector: ${selector}`);
+                break;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          
+          if (phoneInput) {
+            await phoneInput.click();
+            await phoneInput.selectText();
+            await phoneInput.press('Control+v');
+            await rcPage.waitForTimeout(500);
+          } else {
+            console.log('❌ Could not find phone input field');
+            console.log('📋 Phone number is in clipboard - paste manually with Ctrl+V');
+          }
+          
+          // Auto-call logic
+          if (attemptCount === 1) {
+            let callInitiated = false;
+            for (let i = 3; i > 0; i--) {
+              process.stdout.write(`\rAuto-call in ${i}s... (Press ENTER to call now) `);
+              
+              await new Promise(resolve => {
+                const timeout = setTimeout(resolve, 1000);
+                process.stdin.once('data', () => {
+                  clearTimeout(timeout);
+                  callInitiated = true;
+                  resolve();
+                });
+              });
+              
+              if (callInitiated) break;
+            }
+            
+            if (!callInitiated) {
+              try {
+                await phoneInput.press('Enter');
+              } catch {
+                console.log('\n📞 Could not auto-call, please press call button manually');
+              }
+            }
+          } else {
+            try {
+              await phoneInput.press('Enter');
+            } catch {
+              console.log('❌ Could not auto-redial, please press call button manually');
+            }
+          }
+
+          // Wait for call interface to load
+          await rcPage.waitForTimeout(2000);
+          
+          // Auto-mute logic
+          const muteSelectors = [
+            'button[aria-label*="Mute"]',
+            'button[title*="Mute"]',
+            'button[data-sign="muteButton"]',
+            '.mute-button',
+            'button[aria-label*="mute"]',
+            '[data-testid="mute-button"]',
+            'button:has-text("Mute")'
+          ];
+          
+          let micMuted = false;
+          for (const selector of muteSelectors) {
+            try {
+              const muteButton = await rcPage.$(selector);
+              if (muteButton) {
+                await muteButton.click();
+                micMuted = true;
+                break;
+              }
+            } catch (e) {
+              continue;
+            }
+          }
+          
+          if (!micMuted) {
+            console.log('❌ Could not auto-mute microphone - please mute manually');
+          }
+
+          // Enhanced call timer
+          console.log('⏱️  Call timer started - 33 seconds');
+          console.log('🔇 Microphone should be muted');
+          console.log('Press [S] if prospect ANSWERS (will unmute & stop timer)');
+          console.log('Press [SPACE] to hang up early, or wait for auto-hangup');
+          console.log('Press [K] to skip to next prospect');
+          console.log('Press [B] to go back to main menu');
+
+          let hangUpEarly = false;
+          let callAnswered = false;
+          let skipPressed = false;
+
+          process.stdin.setRawMode(true);
+          process.stdin.resume();
+          process.stdin.setEncoding('utf8');
+
+          for (let timeLeft = 33; timeLeft > 0; timeLeft--) {
+            process.stdout.write(`\rCall time: ${timeLeft}s (Press [S] if answered, [SPACE] to hang up, [K] to skip), [B] for menu) `);
+            
+            const keyPressed = await new Promise(resolve => {
+              const timeout = setTimeout(() => resolve(null), 1000);
+              
+              const keyListener = (key) => {
+                clearTimeout(timeout);
+                process.stdin.removeListener('data', keyListener);
+                resolve(key.toString());
+              };
+              
+              process.stdin.once('data', keyListener);
+            });
+          
+            if (keyPressed === 'b' || keyPressed === 'B') {
+              console.log('\n🔄 RETURNING TO MAIN MENU...');
+              skipPressed = true;
+              shouldSkip = true;
+      
+              // Set a flag to break out of all loops and return to main menu
+              returnToMainMenu = true;
+              break;
+            } else if (keyPressed === 'k' || keyPressed === 'K') {
+              console.log('\n⏭️ SKIPPING CONTACT - Moving to next prospect...');
+              skipPressed = true;
+              shouldSkip = true;
+              break;
+            } else if (keyPressed === 's' || keyPressed === 'S') {
+              callAnswered = true;
+              prospectAnswered = true;
+              console.log('\n📞 PROSPECT ANSWERED! Unmuting and stopping timer...');
+              
+              // Try to unmute
+              const unmuteSelectors = [
+                'button[aria-label*="Unmute"]',
+                'button[title*="Unmute"]',
+                'button[aria-label*="unmute"]',
+                '.unmute-button',
+                ...muteSelectors
+              ];
+              
+              let unmuted = false;
+              for (const selector of unmuteSelectors) {
+                try {
+                  const unmuteButton = await rcPage.$(selector);
+                  if (unmuteButton) {
+                    await unmuteButton.click();
+                    console.log(`🔊 Microphone unmuted with selector: ${selector}`);
+                    unmuted = true;
+                    break;
+                  }
+                } catch (e) {
+                  continue;
+                }
+              }
+              
+              if (!unmuted) {
+                console.log('❌ Could not auto-unmute - please unmute manually');
+              }
+              
+              console.log('✅ Call continues - prospect answered!');
+              console.log('Press [CTRL+S] when ready to continue to next contact...');
+              
+              // Wait for Ctrl+S combination
+              await new Promise(resolve => {
+                const ctrlSListener = (key) => {
+                  if (key.charCodeAt(0) === 19) {
+                    console.log('\n➡️ Continuing to next contact...');
+                    process.stdin.removeListener('data', ctrlSListener);
+                    resolve();
+                  }
+                };
+                process.stdin.on('data', ctrlSListener);
+              });
+              
+              break;
+            } else if (keyPressed === ' ') {
+              hangUpEarly = true;
+              console.log(`\n🔴 Hanging up early... (Attempt ${attemptCount}/${maxAttempts})`);
+              break;
+            }
+          }
+
+          // Cleanup keypress listeners
+          try {
+            process.stdin.setRawMode(false);
+            process.stdin.removeAllListeners('data');
+          } catch (e) {
+            // Ignore cleanup errors
+          }
+
+          // Handle hangup
+          if (!callAnswered && !skipPressed) {
+            try {
+              const hangupSelectors = [
+                'button[aria-label*="Hang up"]',
+                'button[title*="Hang up"]', 
+                '.hangup-button',
+                'button[aria-label*="End call"]',
+                '.end-call-button'
+              ];
+              
+              let hungUp = false;
+              for (const selector of hangupSelectors) {
+                try {
+                  const hangupButton = await rcPage.$(selector);
+                  if (hangupButton) {
+                    await hangupButton.click();
+                    console.log(`\n🔴 Call ended with selector: ${selector}`);
+                    hungUp = true;
+                    break;
+                  }
+                } catch (e) {
+                  continue;
+                }
+              }
+              
+              if (!hungUp) {
+                if (hangUpEarly) {
+                  console.log('\n🔴 Manual hangup requested - please click hang up button');
+                } else {
+                  console.log('\n🔴 33 seconds completed - please click hang up button manually');
+                }
+              }
+              
+            } catch (error) {
+              console.log('\n🔴 Could not auto-hangup:', error.message);
+            }
+          } else if (skipPressed) {
+            try {
+              const hangupSelectors = [
+                'button[aria-label*="Hang up"]',
+                'button[title*="Hang up"]', 
+                '.hangup-button',
+                'button[aria-label*="End call"]',
+                '.end-call-button'
+              ];
+              
+              for (const selector of hangupSelectors) {
+                try {
+                  const hangupButton = await rcPage.$(selector);
+                  if (hangupButton) {
+                    await hangupButton.click();
+                    console.log(`🔴 Call ended for skip`);
+                    break;
+                  }
+                } catch (e) {
+                  continue;
+                }
+              }
+            } catch (error) {
+              console.log('Could not auto-hangup for skip');
+            }
+          }
+          
+          // Pause before next attempt/contact
+          await rcPage.waitForTimeout(1000);
+          
+          // If prospect answered or skip pressed, break the attempt loop
+          if (prospectAnswered || shouldSkip || returnToMainMenu) {
+            break;
+          }
+        }
+        
+        // After finishing all attempts for this prospect
+        if (prospectAnswered) {
+          console.log('\n✅ Prospect answered - moving to next contact...\n');
+        } else if (shouldSkip) {
+          console.log('\n⏭️ Contact skipped - moving to next contact...\n');
+        } else {
+          console.log(`\n❌ No answer after ${maxAttempts} attempts - moving to next contact...\n`);
+        }
+        
+        // Check if we need to return to main menu
+        if (returnToMainMenu) {
+          console.log('\n🔄 Exiting status-based dialing - returning to main menu...\n');
+          break; // This breaks out of the prospect loop
         }
       }
-      // Check if we need to return to main menu from status mode
+      
+      // Check if we need to return to main menu after finishing all prospects with this status
       if (returnToMainMenu) {
+        break; // Break out of the status loop
+      }
+      
+      // Move to next status
+      currentStatusIndex++;
+      
+      if (currentStatusIndex >= statusesToDial.length) {
+        console.log('\n🎉 All selected statuses completed!\n');
+        
+        // Switch back to IRS Logics to highlight table
+        await page.bringToFront();
+        await page.waitForTimeout(1000);
+        
+        // Clear all highlights
+        await frame.evaluate(() => {
+          const allRows = document.querySelectorAll('tr.k-master-row');
+          allRows.forEach(row => {
+            row.style.background = '';
+            row.style.border = '';
+          });
+        });
+        
         break;
       }
     }
