@@ -956,7 +956,7 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
       }
       
       // Pause before next attempt/contact
-      await rcPage.waitForTimeout(1000);
+      await rcPage.waitForTimeout(5000);
       
       // If prospect answered or skip pressed, break the attempt loop
       if (prospectAnswered || shouldSkip || returnToMainMenu) {
@@ -1174,7 +1174,7 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
           }
 
           // Wait for call interface to load
-          await rcPage.waitForTimeout(2000);
+          await rcPage.waitForTimeout(3000);
           
           // Auto-mute logic
           const muteSelectors = [
@@ -1378,7 +1378,7 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
           }
           
           // Pause before next attempt/contact
-          await rcPage.waitForTimeout(1000);
+          await rcPage.waitForTimeout(5000);
           
           // If prospect answered or skip pressed, break the attempt loop
           if (prospectAnswered || shouldSkip || returnToMainMenu) {
