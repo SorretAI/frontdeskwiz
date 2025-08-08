@@ -1,4 +1,4 @@
-const { chromium } = require('playwright');
+vayaconst { chromium } = require('playwright');
 const prompt = require('prompt-sync')();
 const path = require('path');
 
@@ -831,7 +831,7 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
           callAnswered = true;
           prospectAnswered = true;
           console.log('\n📞 PROSPECT ANSWERED! Unmuting and stopping timer...');
-          
+          /*
           // Try to unmute
           const unmuteSelectors = [
             'button[aria-label*="Unmute"]',
@@ -840,8 +840,9 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
             '.unmute-button',
             ...muteSelectors
           ];
-          
+         */ 
           let unmuted = false;
+          /*
           for (const selector of unmuteSelectors) {
             try {
               const unmuteButton = await rcPage.$(selector);
@@ -857,8 +858,8 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
           }
           
           if (!unmuted) {
-            console.log('❌ Could not auto-unmute - please unmute manually');
-          }
+          */  console.log('❌ Could not auto-unmute - please unmute manually');
+          //}
           
           console.log('✅ Call continues - prospect answered!');
           console.log('Press [CTRL+S] when ready to continue to next contact...');
@@ -1253,7 +1254,7 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
               callAnswered = true;
               prospectAnswered = true;
               console.log('\n📞 PROSPECT ANSWERED! Unmuting and stopping timer...');
-              
+              /*
               // Try to unmute
               const unmuteSelectors = [
                 'button[aria-label*="Unmute"]',
@@ -1279,8 +1280,8 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
               }
               
               if (!unmuted) {
-                console.log('❌ Could not auto-unmute - please unmute manually');
-              }
+              */  console.log('❌ Could not auto-unmute - please unmute manually');
+              //}
               
               console.log('✅ Call continues - prospect answered!');
               console.log('Press [CTRL+S] when ready to continue to next contact...');

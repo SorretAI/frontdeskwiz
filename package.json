@@ -8,7 +8,7 @@
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "automation for CRM and calls using playwright",
   "dependencies": {
     "dotenv": "^17.2.0",
     "playwright": "^1.54.1",
