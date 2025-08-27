@@ -1,17 +1,13 @@
-vayaconst { chromium } = require('playwright');
+const { chromium } = require('playwright');
 const prompt = require('prompt-sync')();
 const path = require('path');
 
-// Try to load environment variables, but don't crash if .env doesn't exist
-try {
-  require('dotenv').config();
-} catch (e) {
-  console.log('No .env file found, using hardcoded credentials');
-}
+// SECURE APPROACH - .env is REQUIRED, no fallbacks
+require('dotenv').config();
 
 // CONFIGURATION SECTION
-const LOGIN_EMAIL = process.env.LOGIN_EMAIL || 'lparada@federaltaxlawgroup.com';
-const LOGIN_PASSWORD = process.env.LOGIN_PASSWORD || 'FTLG1208681!!';
+const LOGIN_EMAIL = process.env.LOGIN_EMAIL ||;
+const LOGIN_PASSWORD = process.env.LOGIN_PASSWORD ||;
 const USER_DATA_DIR = './playwright-profile';
 console.log('=== CREDENTIAL CHECK ===');
 console.log('LOGIN_EMAIL loaded:', LOGIN_EMAIL ? 'YES' : 'NO');
@@ -840,9 +836,9 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
             '.unmute-button',
             ...muteSelectors
           ];
-         */ 
+          
           let unmuted = false;
-          /*
+          
           for (const selector of unmuteSelectors) {
             try {
               const unmuteButton = await rcPage.$(selector);
@@ -858,8 +854,8 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
           }
           
           if (!unmuted) {
-          */  console.log('❌ Could not auto-unmute - please unmute manually');
-          //}
+            console.log('❌ Could not auto-unmute - please unmute manually');
+          }*/
           
           console.log('✅ Call continues - prospect answered!');
           console.log('Press [CTRL+S] when ready to continue to next contact...');
@@ -1280,9 +1276,9 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
               }
               
               if (!unmuted) {
-              */  console.log('❌ Could not auto-unmute - please unmute manually');
-              //}
-              
+                console.log('❌ Could not auto-unmute - please unmute manually');
+              }
+              */
               console.log('✅ Call continues - prospect answered!');
               console.log('Press [CTRL+S] when ready to continue to next contact...');
               
