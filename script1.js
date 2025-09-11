@@ -6,8 +6,8 @@ const path = require('path');
 require('dotenv').config();
 
 // CONFIGURATION SECTION
-const LOGIN_EMAIL = process.env.LOGIN_EMAIL ||;
-const LOGIN_PASSWORD = process.env.LOGIN_PASSWORD ||;
+const LOGIN_EMAIL = process.env.LOGIN_EMAIL ?? '';
+const LOGIN_PASSWORD = process.env.LOGIN_PASSWORD ?? '';
 const USER_DATA_DIR = './playwright-profile';
 console.log('=== CREDENTIAL CHECK ===');
 console.log('LOGIN_EMAIL loaded:', LOGIN_EMAIL ? 'YES' : 'NO');
@@ -126,85 +126,115 @@ async function loginToIRSLogics(page, email, password) {
 }
 async function findCaseAndGetStatus(frame, caseNumber) {
   console.log(`🔍 Looking for case number: ${caseNumber}`);
-  
+
+  // 1) Build a header title -> index map (survives column re-order)
+  const headerMap = {};
   try {
-    // Get all rows
-    const rows = await frame.$$('tr.k-master-row');
-    
+    const ths = await frame.$$(`th[role="columnheader"]`);
+    for (const th of ths) {
+      const titleAttr = await th.getAttribute('data-title');
+      const title = (titleAttr || (await th.innerText()) || '').trim();
+      const idxStr = await th.getAttribute('data-index');
+      const idx = Number.parseInt(idxStr, 10);
+      if (!Number.isNaN(idx) && title) headerMap[title] = idx;
+    }
+  } catch (e) {
+    // header probing failed; we’ll just use the fallback numbers below
+  }
+
+  // 2) Resolve column indexes (header-aware, with sane fallbacks)
+  const CASE_COL   = headerMap['Case #'] ?? 0;
+  const NAME_COL   = headerMap['Name']   ?? 8;
+  const PHONE_COL  = headerMap['Cell']   ?? 7;   // your phone column label was “Cell”
+  const STATUS_COL = headerMap['Status'] ?? 10;
+
+  const normalize = s => (s || '').trim();
+  const rows = await frame.$$(`tr.k-master-row`);
+
+  try {
     for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
       const row = rows[rowIdx];
-      const cells = await row.$$('td');
-      
-      if (cells.length > 9) {
-        // Assuming case number is in the first column (index 0)
-        const caseCell = (await cells[0].innerText()).trim();
-        
-        if (caseCell === caseNumber || caseCell.includes(caseNumber)) {
-          const name = (await cells[1].innerText()).trim();
-          const phone = (await cells[6].innerText()).trim();
-          const status = (await cells[9].innerText()).trim();
-          
-          console.log(`✅ Found case: ${caseNumber}`);
-          console.log(`   Name: ${name}`);
-          console.log(`   Phone: ${phone}`);
-          console.log(`   Status: ${status}`);
-          
-          return {
-            rowIndex: rowIdx,
-            caseNumber: caseCell,
-            name: name,
-            phone: phone,
-            status: status,
-            found: true
-          };
-        }
+      // keep it scoped to this row only
+      const cells = await row.$$(':scope > td');
+      if (!cells.length) continue;
+
+      const caseCell = normalize(await cells[CASE_COL].innerText());
+      if (!caseCell) continue;
+
+      if (caseCell === caseNumber || caseCell.includes(caseNumber)) {
+        const name   = normalize(await cells[NAME_COL].innerText());
+        const phone  = normalize(await cells[PHONE_COL].innerText());
+        const status = normalize(await cells[STATUS_COL].innerText());
+
+        console.log(`✅ Found case: ${caseCell}`);
+        console.log(`   Name:  ${name}`);
+        console.log(`   Phone: ${phone}`);
+        console.log(`   Status:${status}`);
+
+        return {
+          rowIndex: rowIdx,
+          caseNumber: caseCell,
+          name,
+          phone,
+          status,
+          found: true,
+        };
       }
     }
-    
+
     console.log(`❌ Case number ${caseNumber} not found`);
     return { found: false };
-    
   } catch (error) {
     console.log(`Error finding case: ${error.message}`);
     return { found: false };
   }
 }
 
-// NEW FUNCTION: Get all remaining cases with the same status starting from a specific row
+// Get all remaining cases with the same status starting from a specific row
 async function getCasesWithSameStatus(frame, startRowIndex, targetStatus) {
   console.log(`🔍 Looking for more cases with status: ${targetStatus} starting from row ${startRowIndex}`);
-  
+
+  // Build header map (robust to column reordering)
+  const headerMap = {};
   try {
-    const rows = await frame.$$('tr.k-master-row');
-    const matchingCases = [];
-    
-    // Start from the specified row index
-    for (let rowIdx = startRowIndex; rowIdx < rows.length; rowIdx++) {
+    const ths = await frame.$$(`th[role="columnheader"]`);
+    for (const th of ths) {
+      const titleAttr = await th.getAttribute('data-title');
+      const title = (titleAttr || (await th.innerText()) || '').trim();
+      const idxStr = await th.getAttribute('data-index');
+      const idx = Number.parseInt(idxStr, 10);
+      if (!Number.isNaN(idx) && title) headerMap[title] = idx;
+    }
+  } catch (_) {}
+
+  // Column indexes (fallbacks based on your dump)
+  const CASE_COL   = headerMap['Case #'] ?? 0;
+  const NAME_COL   = headerMap['Name']   ?? 8;
+  const PHONE_COL  = headerMap['Cell']   ?? 7;   // phone column label is "Cell"
+  const STATUS_COL = headerMap['Status'] ?? 10;
+
+  const norm = s => (s || '').trim();
+  const matchingCases = [];
+
+  try {
+    const rows = await frame.$$(`tr.k-master-row`);
+    for (let rowIdx = Math.max(0, startRowIndex); rowIdx < rows.length; rowIdx++) {
       const row = rows[rowIdx];
-      const cells = await row.$$('td');
-      
-      if (cells.length > 9) {
-        const status = (await cells[9].innerText()).trim();
-        
-        if (status === targetStatus) {
-          const caseNumber = (await cells[0].innerText()).trim();
-          const name = (await cells[1].innerText()).trim();
-          const phone = (await cells[6].innerText()).trim();
-          
-          matchingCases.push({
-            rowIndex: rowIdx,
-            caseNumber: caseNumber,
-            name: name,
-            phone: phone,
-            status: status
-          });
-        }
+      const cells = await row.$$(':scope > td');
+      if (!cells.length) continue;
+
+      const status = norm(await cells[STATUS_COL].innerText());
+      if (status === norm(targetStatus)) {
+        const caseNumber = norm(await cells[CASE_COL].innerText());
+        const name       = norm(await cells[NAME_COL].innerText());
+        const phone      = norm(await cells[PHONE_COL].innerText());
+
+        matchingCases.push({ rowIndex: rowIdx, caseNumber, name, phone, status });
       }
     }
-    
+
     console.log(`✅ Found ${matchingCases.length} cases with status: ${targetStatus}`);
     return matchingCases;
-    
   } catch (error) {
     console.log(`Error getting cases with same status: ${error.message}`);
     return [];
@@ -387,23 +417,23 @@ try {
     prompt('Please click Cases manually and press Enter...');
   }
   
-  // Now click on FD 2 PROSPECTS (it should be visible after clicking Cases)
-  console.log('Looking for FD 2 PROSPECTS...');
+  // Now click on FD 4 PROSPECTS (it should be visible after clicking Cases)
+  console.log('Looking for FD 4 PROSPECTS...');
   const fd2Selectors = [
-    'text=FD 2 PROSPECTS',
-    'a:has-text("FD 2 PROSPECTS")',
-    '[title="FD 2 PROSPECTS"]',
-    'span:has-text("FD 2 PROSPECTS")'
+    'text=FD 4 PROSPECTS',
+    'a:has-text("FD 4 PROSPECTS")',
+    '[title="FD 4 PROSPECTS"]',
+    'span:has-text("FD 4 PROSPECTS")'
   ];
   
-  let fd2Clicked = false;
+  let fd4Clicked = false;
   for (const selector of fd2Selectors) {
     try {
-      const fd2Element = await page.$(selector);
-      if (fd2Element) {
-        await fd2Element.click();
-        console.log(`FD 2 PROSPECTS clicked with selector: ${selector}`);
-        fd2Clicked = true;
+      const fd4Element = await page.$(selector);
+      if (fd4Element) {
+        await fd4Element.click();
+        console.log(`FD 4 PROSPECTS clicked with selector: ${selector}`);
+        fd4Clicked = true;
         await page.waitForTimeout(3000);
         break;
       }
@@ -412,16 +442,16 @@ try {
     }
   }
   
-  if (!fd2Clicked) {
-    console.log('Could not click FD 2 PROSPECTS automatically');
-    prompt('Please click FD 2 PROSPECTS manually and press Enter...');
+  if (!fd4Clicked) {
+    console.log('Could not click FD 4 PROSPECTS automatically');
+    prompt('Please click FD 4 PROSPECTS manually and press Enter...');
   }
   
   console.log('Navigation completed! Looking for prospects table...');
   
 } catch (error) {
   console.log('Navigation error:', error.message);
-  prompt('Please navigate manually to FD 2 PROSPECTS and press Enter...');
+  prompt('Please navigate manually to FD 4 PROSPECTS and press Enter...');
 }
 
 console.log('Navigation completed! Now sorting by Status...');
@@ -470,7 +500,7 @@ try {
   
 } catch (error) {
   console.log('Error setting up table:', error.message);
-  prompt('Please make sure you are on FD 2 PROSPECTS page and press Enter...');
+  prompt('Please make sure you are on FD 4 PROSPECTS page and press Enter...');
 }
 
     // SECTION 10: ENHANCED STATUS SELECTOR WITH CASE NUMBER OPTION
@@ -1005,21 +1035,23 @@ await frame.waitForSelector('tr.k-master-row', { timeout: 10000 });
       const currentStatus = statusesToDial[currentStatusIndex];
       console.log(`\nSearching for prospects with status: ${currentStatus}`);
       
+      
       // GET ALL PROSPECTS WITH THIS STATUS FIRST (like case number mode)
       const rows = await frame.$$('tr.k-master-row');
       const prospectsWithThisStatus = [];
       
+      // [FIXED-2025-09-10] use :scope > td and correct column indexes
       for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
         const row = rows[rowIdx];
-        const cells = await row.$$('td');
+        const cells = await row.$$(':scope > td');   // was $$('td')
         
-        if (cells.length > 9) {
-          const status = (await cells[9].innerText()).trim();
+        if (cells.length > 10) {
+          const status = (await cells[10].innerText()).trim();  // was [9]
           
           if (status === currentStatus) {
             const caseNumber = (await cells[0].innerText()).trim();
-            const name = (await cells[1].innerText()).trim();
-            const phone = (await cells[6].innerText()).trim();
+            const name = (await cells[8].innerText()).trim();
+            const phone = (await cells[7].innerText()).trim();
             
             prospectsWithThisStatus.push({
               rowIndex: rowIdx,
